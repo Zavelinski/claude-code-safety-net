@@ -42,11 +42,17 @@ try {
   }
   if (!root) process.exit(0);
 
-  // Snapshot the working tree without touching it. Empty output => clean tree.
-  let stashSha;
-  try { stashSha = git(['stash', 'create', 'safety-net'], root); }
+  // Snapshot the working tree without touching it. Empty output => clean tree,
+  // in which case the snapshot is the current HEAD commit (so an edit on a clean
+  // repo is still undoable, restoring the committed state).
+  let snapshot;
+  try { snapshot = git(['stash', 'create', 'safety-net'], root); }
   catch (_) { process.exit(0); }
-  if (!stashSha) process.exit(0);
+  if (!snapshot) {
+    try { snapshot = git(['rev-parse', 'HEAD'], root); }
+    catch (_) { process.exit(0); } // no commits yet -> nothing to snapshot
+  }
+  const stashSha = snapshot;
 
   let tree;
   try { tree = git(['rev-parse', stashSha + '^{tree}'], root); }

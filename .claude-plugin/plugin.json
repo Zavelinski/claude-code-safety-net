@@ -1,0 +1,10 @@
+{
+  "name": "safety-net",
+  "description": "Automatic, reversible git checkpoints around Claude's edits. Snapshots the working tree before every edit; say 'undo' to roll back. Recovery-first.",
+  "version": "1.0.0",
+  "author": { "name": "Zavelinski" },
+  "homepage": "https://github.com/Zavelinski/claude-code-safety-net",
+  "repository": "https://github.com/Zavelinski/claude-code-safety-net",
+  "license": "MIT",
+  "keywords": ["git", "checkpoint", "undo", "rollback", "recovery", "safety"]
+}

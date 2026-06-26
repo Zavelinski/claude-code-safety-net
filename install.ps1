@@ -1,53 +1,23 @@
-# safety-net installer (Windows / PowerShell)
-# Copies the skill + hook into ~/.claude and registers the PreToolUse hook in settings.json.
-
+# Install the safety-net skill + hook into ~/.claude (or $env:CLAUDE_CONFIG_DIR).
 $ErrorActionPreference = 'Stop'
+
 $repo = Split-Path -Parent $MyInvocation.MyCommand.Path
-$claude = Join-Path $env:USERPROFILE '.claude'
-$skillDir = Join-Path $claude 'skills\safety-net'
+$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
 
-New-Item -ItemType Directory -Force -Path (Join-Path $skillDir 'hooks') | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $skillDir 'bin') | Out-Null
-
-Copy-Item (Join-Path $repo 'SKILL.md') (Join-Path $skillDir 'SKILL.md') -Force
-Copy-Item (Join-Path $repo 'hooks\safety-net-checkpoint.js') (Join-Path $skillDir 'hooks\safety-net-checkpoint.js') -Force
-Copy-Item (Join-Path $repo 'bin\safety-net.js') (Join-Path $skillDir 'bin\safety-net.js') -Force
-
-# Register the PreToolUse hook in settings.json (merge, do not clobber).
-$settingsPath = Join-Path $claude 'settings.json'
-if (Test-Path $settingsPath) {
-  $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
-} else {
-  $settings = [PSCustomObject]@{}
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  Write-Error "node is required (Claude Code hooks run on node)."
 }
 
-$hookCmd = 'node "' + (Join-Path $skillDir 'hooks\safety-net-checkpoint.js') + '"'
+New-Item -ItemType Directory -Force -Path (Join-Path $claudeDir 'skills\safety-net\bin') | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $claudeDir 'hooks')               | Out-Null
 
-if (-not $settings.PSObject.Properties['hooks']) {
-  $settings | Add-Member -NotePropertyName 'hooks' -NotePropertyValue ([PSCustomObject]@{})
-}
-if (-not $settings.hooks.PSObject.Properties['PreToolUse']) {
-  $settings.hooks | Add-Member -NotePropertyName 'PreToolUse' -NotePropertyValue @()
-}
+Copy-Item (Join-Path $repo 'skills\safety-net\SKILL.md')        (Join-Path $claudeDir 'skills\safety-net\SKILL.md')        -Force
+Copy-Item (Join-Path $repo 'skills\safety-net\bin\safety-net.js') (Join-Path $claudeDir 'skills\safety-net\bin\safety-net.js') -Force
+Copy-Item (Join-Path $repo 'hooks\safety-net-checkpoint.js')    (Join-Path $claudeDir 'hooks\safety-net-checkpoint.js')    -Force
 
-$already = $false
-foreach ($group in $settings.hooks.PreToolUse) {
-  foreach ($h in $group.hooks) {
-    if ($h.command -eq $hookCmd) { $already = $true }
-  }
-}
+node (Join-Path $repo 'install\merge-settings.js') add
 
-if (-not $already) {
-  $entry = [PSCustomObject]@{
-    matcher = 'Edit|Write|MultiEdit|NotebookEdit'
-    hooks   = @([PSCustomObject]@{ type = 'command'; command = $hookCmd })
-  }
-  $settings.hooks.PreToolUse = @($settings.hooks.PreToolUse) + $entry
-  ($settings | ConvertTo-Json -Depth 20) | Out-File -FilePath $settingsPath -Encoding utf8
-  Write-Host 'safety-net: hook registered in settings.json'
-} else {
-  Write-Host 'safety-net: hook already registered'
-}
-
-Write-Host ('safety-net: installed to ' + $skillDir)
-Write-Host 'Restart Claude Code so the new hook is picked up.'
+Write-Host ""
+Write-Host "safety-net installed into $claudeDir"
+Write-Host "Restart Claude Code so the PreToolUse checkpoint hook is picked up."
+Write-Host "Then, inside any git repo, say 'undo' to roll back the last edit."
